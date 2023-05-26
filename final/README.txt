@@ -1,0 +1,1 @@
+Versiunea asta trimite cateva cadre pana cand trimite niste caractere prost si se rupe tot. E nevoie de crc & ack. Intelesesem prost ce face onTxDone. Vine in curand varianta modificata.
