@@ -8,9 +8,14 @@
 #define LORA_RESET 14
 #define LORA_DIO0 2
 
-int pack[LORA_PACKET_SIZE];
+#define ANSWER_TIMEOUT 2000 ///daca nu primesc raspuns la mesaj dupa 2s, retrimit mesajul.
+
+int pack[LORA_PACKET_SIZE], prevPack[LORA_PACKET_SIZE];
 volatile bool justReceivedPack = false, isCrcOk = true, isTxComplete = true;
-volatile int packetSize = 0;
+volatile int packetSize = 0, prevPacketSize = -1;
+volatile unsigned long lastSendTime = 0;
+
+int lastAckValue = 0;
 
 void onReceive(int psz) {
     //Serial.printf("onReceive begin.\n");
@@ -22,6 +27,8 @@ void onReceive(int psz) {
 void onTxDone() {
     //Serial.printf("onTxDone begin.\n");
     isTxComplete = true;
+    lastSendTime = millis();
+    LoRa.receive();
 }
 
 void onCrcError() {
@@ -54,8 +61,14 @@ void loop() {
     if (!isTxComplete) {
         return;
     }
-    
-    if (justReceivedPack) {
+
+    if (prevPacketSize != -1 && millis() - lastSendTime > ANSWER_TIMEOUT) {
+        Serial.printf("Resending ack (lastAckValue = %d).\n", lastAckValue);
+        isTxComplete = false;
+        LoRa.beginPacket();
+        LoRa.write(lastAckValue);
+        LoRa.endPacket();
+    } else if (justReceivedPack) {
         justReceivedPack = false;
 
         if (isCrcOk) {
@@ -63,25 +76,33 @@ void loop() {
                 pack[i] = LoRa.read();
             }
 
-            Serial.printf("primit ok! pack[0] = %d\n", pack[0]);
-
-            isTxComplete = false;
-            LoRa.beginPacket();
-            for (int _ = 0; _ < 8; _++) LoRa.write(0);
-            LoRa.endPacket();
-            LoRa.receive();
-        } else {
-            while (LoRa.available()) {
-                LoRa.read();
+            if (packetSize == prevPacketSize && memcmp(pack, prevPack, packetSize) == 0) {
+                Serial.printf("primit ok, pachet duplicat, drop. pack[0] = %d\n", pack[0]);
+            } else {
+                Serial.printf("primit ok! pack[0] = %d\n", pack[0]);
+                prevPacketSize = packetSize;
+                memcpy(prevPack, pack, packetSize);
             }
 
-            Serial.printf("primit bushit.\n");
+            isTxComplete = false;
+            lastAckValue = 0;
+            LoRa.beginPacket();
+            LoRa.write(0);
+            LoRa.endPacket();
+        } else {
+            int bytes_available = 0;
+            while (LoRa.available()) {
+                LoRa.read();
+                bytes_available++;
+            }
+
+            Serial.printf("primit bushit (%d bytes disponibili in buffer).\n", bytes_available);
 
             isTxComplete = false;
+            lastAckValue = 1;
             LoRa.beginPacket();
-            for (int _ = 0; _ < 8; _++) LoRa.write(1);
+            LoRa.write(1);
             LoRa.endPacket();
-            LoRa.receive();
         }
     }
 }
