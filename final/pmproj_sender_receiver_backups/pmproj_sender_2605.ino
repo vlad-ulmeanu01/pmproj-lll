@@ -9,8 +9,6 @@ HardwareSerial CustomPort(2); // use UART2
 #define CONSECUTIVE_NEEDED_START_BYTES 32
 #define START_PICS(_b) for (int _ = 0; _ < CONSECUTIVE_NEEDED_START_BYTES; _++) Serial.write(_b);
 
-#define ANSWER_TIMEOUT 2000 ///daca nu primesc un raspuns la pachetul trimis dupa 2s, retrimit pachetul.
-
 #define STATE_IDLE 0 ///nu am comandat inca primirea unei imagini de la ESP32-CAM.
 #define STATE_GET_SIZE 1 ///am comandat primirea unei imagini si astept primii 4 bytes, care imi spun marimea imaginii.
 #define STATE_GET_BYTES 2 ///inca astept sa primesc toti bytes-ii din imagine. ii pun intr-un buffer. nu vreau sa folosesc si lora in acelasi timp.
@@ -31,7 +29,6 @@ int remainingImageBytes = 0, receivedSizeBytes = 0;
 
 volatile int packetSize = 0, state = STATE_IDLE;
 volatile bool justReceivedAck = false, isCrcOk = true;
-volatile unsigned long lastSendTime = 0;
 
 void onReceive(int psz) {
     packetSize = psz;
@@ -41,7 +38,6 @@ void onReceive(int psz) {
 
 void onTxDone() {
     state = STATE_WAIT_ACK;
-    lastSendTime = millis();
     LoRa.receive();
 }
 
@@ -159,8 +155,8 @@ void loop() {
         if (limitedImbuffIndex < limitedImbuffSize) {
             state = STATE_WAIT_TX;
             justReceivedAck = false;
-            limitedImbuffPrevIndex = limitedImbuffIndex;
             LoRa.beginPacket();
+            limitedImbuffPrevIndex = limitedImbuffIndex;
             for (int i = 0; limitedImbuffIndex < limitedImbuffSize && i < LORA_PACKET_SIZE; limitedImbuffIndex++, i++) {
                 LoRa.write(limited_imbuff[limitedImbuffIndex]);
             }
@@ -173,8 +169,6 @@ void loop() {
     } else if (state == STATE_WAIT_TX) {
         ///astept callback onTxDone.
     } else if (state == STATE_WAIT_ACK) {
-        ///daca astept ack sigur am trimis un pachet (in plus recent: am timp in care doar adun date de la camera si streakuri in care trimit pachete).
-
         if (justReceivedAck) {
             justReceivedAck = false;
             state = STATE_SEND_LORA;
@@ -196,12 +190,6 @@ void loop() {
                 Serial.printf("ack fail 2.\n");
                 limitedImbuffIndex = limitedImbuffPrevIndex; ///nici macar ack-ul nu este consistent. trimit din nou ultima parte.
             }
-        } else if (millis() - lastSendTime > ANSWER_TIMEOUT) {
-            ///trimit din nou pachetul. las STATE_SEND_LORA sa se ocupe.
-            Serial.printf("Resending packet.\n");
-
-            state = STATE_SEND_LORA;
-            limitedImbuffIndex = limitedImbuffPrevIndex;
         }
     }
 }

@@ -95,7 +95,7 @@ time.sleep(1)
 print("conn started.")
 
 pygame.init()
-window = pygame.display.set_mode((256, 256))
+window = pygame.display.set_mode((2 * 256, 2 * 256))
 
 #stiu ca primesc pixeli doar dupa 32 de bytes consecutivi pe 0.
 startByte = 0xE2
@@ -149,7 +149,7 @@ while True:
                     canGetPixel = False
                 else:
                     x, y, l, r, g, b, prevSplitActions = px
-                    pygame.draw.rect(window, (r, g, b), pygame.Rect(x, y, l, l))
+                    pygame.draw.rect(window, (r, g, b), pygame.Rect(x * 2, y * 2, l * 2, l * 2))
             
             # print(f"cnt bytes = {remainingImageBytes}, avgCommonSplits = {buffer.avgCommonSplits / buffer.cntCompressedPixels}")
 

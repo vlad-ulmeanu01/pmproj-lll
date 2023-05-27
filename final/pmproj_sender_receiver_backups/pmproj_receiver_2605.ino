@@ -1,4 +1,4 @@
-///Receiver, ESP32-WROOMU.
+///receiver.
 
 #include <SPI.h>
 #include <LoRa.h>
@@ -12,13 +12,9 @@
 #define LORA_RESET 14
 #define LORA_DIO0 2
 
-#define ANSWER_TIMEOUT 2000
-
-uint8_t pack[LORA_PACKET_SIZE], prevPack[LORA_PACKET_SIZE];
+uint8_t pack[LORA_PACKET_SIZE];
 volatile bool justReceivedPack = false, isCrcOk = true, isTxComplete = true;
-volatile int packetSize = 0, prevPacketSize = -1;
-volatile unsigned long lastSendTime = 0;
-volatile uint8_t lastAckValue = 0;
+volatile int packetSize = 0;
 
 void onReceive(int psz) {
     packetSize = psz;
@@ -28,7 +24,6 @@ void onReceive(int psz) {
 
 void onTxDone() {
     isTxComplete = true;
-    lastSendTime = millis();
     LoRa.receive();
 }
 
@@ -71,21 +66,13 @@ void loop() {
             for (int i = 0; i < packetSize; i++) {
                 pack[i] = LoRa.read();
             }
-
-            if (packetSize == prevPacketSize && memcmp(pack, prevPack, packetSize) == 0) {
-                ///pachet duplicat, dau drop.
-            } else {
-                prevPacketSize = packetSize;
-                memcpy(prevPack, pack, packetSize);
-
-                for (int i = 0; i < packetSize; i++) {
-                    Serial.write(pack[i]);
-                }
+    
+            for (int i = 0; i < packetSize; i++) {
+                Serial.write(pack[i]);
             }
 
             ///raspund cu ack afirmativ <=> astept urmatorul pachet.
             isTxComplete = false;
-            lastAckValue = 0;
             LoRa.beginPacket();
             LoRa.write(0);
             LoRa.endPacket();
@@ -96,15 +83,9 @@ void loop() {
 
             ///raspund cu ack negativ <=> astept pachetul curent din nou.
             isTxComplete = false;
-            lastAckValue = 1;
             LoRa.beginPacket();
             LoRa.write(1);
             LoRa.endPacket();
         }
-    } else if (prevPacketSize != -1 && millis() - lastSendTime > ANSWER_TIMEOUT) {
-        isTxComplete = false;
-        LoRa.beginPacket();
-        LoRa.write(lastAckValue);
-        LoRa.endPacket();
     }
 }
