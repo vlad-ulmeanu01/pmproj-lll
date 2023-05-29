@@ -13,12 +13,8 @@
 #define LORA_DIO0 2
 
 #define ANSWER_TIMEOUT 2000
-#define PACK_BUFFER_MAX_SIZE 65536
 
 uint8_t pack[LORA_PACKET_SIZE], prevPack[LORA_PACKET_SIZE];
-uint8_t *pack_buffer = NULL; ///tb sa trimit ack imd cu primesc pachet. nu pot sa astept dupa seriala.
-int pack_buffer_ind = 0;
-
 volatile bool justReceivedPack = false, isCrcOk = true, isTxComplete = true;
 volatile int packetSize = 0, prevPacketSize = -1;
 volatile unsigned long lastSendTime = 0;
@@ -43,9 +39,6 @@ void onCrcError() {
 
 void setup() {
     Serial.begin(115200);
-
-    pack_buffer = (uint8_t *)malloc(PACK_BUFFER_MAX_SIZE);
-    assert(pack_buffer);
 
     LoRa.setPins(LORA_SS, LORA_RESET, LORA_DIO0);
 
@@ -75,18 +68,9 @@ void loop() {
         justReceivedPack = false;
 
         if (isCrcOk) {
-            //Serial.printf("got pack! packetSize = %d\n", packetSize);
-
             for (int i = 0; i < packetSize; i++) {
                 pack[i] = LoRa.read();
             }
-
-            ///raspund cu ack afirmativ <=> astept urmatorul pachet.
-            isTxComplete = false;
-            lastAckValue = 0;
-            LoRa.beginPacket();
-            LoRa.write(0);
-            LoRa.endPacket();
 
             if (packetSize == prevPacketSize && memcmp(pack, prevPack, packetSize) == 0) {
                 ///pachet duplicat, dau drop.
@@ -95,12 +79,17 @@ void loop() {
                 memcpy(prevPack, pack, packetSize);
 
                 for (int i = 0; i < packetSize; i++) {
-                    pack_buffer[pack_buffer_ind] = pack[i];
-                    pack_buffer_ind++;
+                    Serial.write(pack[i]);
                 }
             }
+
+            ///raspund cu ack afirmativ <=> astept urmatorul pachet.
+            isTxComplete = false;
+            lastAckValue = 0;
+            LoRa.beginPacket();
+            LoRa.write(0);
+            LoRa.endPacket();
         } else {
-            //Serial.printf("got pack with bad ack.\n");
             while (LoRa.available()) {
                 LoRa.read();
             }
@@ -113,20 +102,9 @@ void loop() {
             LoRa.endPacket();
         }
     } else if (prevPacketSize != -1 && millis() - lastSendTime > ANSWER_TIMEOUT) {
-        //Serial.printf("Resending pack. (lastAckValue = %d)\n", lastAckValue);
-
         isTxComplete = false;
         LoRa.beginPacket();
         LoRa.write(lastAckValue);
         LoRa.endPacket();
-    } else if (pack_buffer_ind > 0) {
-        ///nu am absolut nimic altceva de facut in afara de golirea bufferului serial.
-
-        ///TODO daca tot nu merge, opreste forul daca s-a ridicat justReceivedPack si trateaza pack_buffer ca un deque.
-        for (int i = 0; i < pack_buffer_ind; i++) {
-            Serial.write(pack_buffer[i]);
-        }
-
-        pack_buffer_ind = 0;
     }
 }

@@ -90,7 +90,6 @@ conn = serial.Serial(port = "COM4",
                      parity = serial.PARITY_NONE,
                      stopbits = serial.STOPBITS_ONE,
                      bytesize = serial.EIGHTBITS)
-conn.set_buffer_size(rx_size = 65536, tx_size = 65536)
 
 time.sleep(1)
 print("conn started.")
