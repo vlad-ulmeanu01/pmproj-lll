@@ -17,7 +17,7 @@
 
 uint8_t pack[LORA_PACKET_SIZE], prevPack[LORA_PACKET_SIZE];
 uint8_t *pack_buffer = NULL; ///tb sa trimit ack imd cu primesc pachet. nu pot sa astept dupa seriala.
-volatile int pack_buffer_st = 0, pack_buffer_dr = 0; ///st = prima pozitie scrisa, dr = prima pozitie nescrisa.
+int pack_buffer_ind = 0;
 
 volatile bool justReceivedPack = false, isCrcOk = true, isTxComplete = true;
 volatile int packetSize = 0, prevPacketSize = -1;
@@ -95,8 +95,8 @@ void loop() {
                 memcpy(prevPack, pack, packetSize);
 
                 for (int i = 0; i < packetSize; i++) {
-                    pack_buffer[pack_buffer_dr] = pack[i];
-                    pack_buffer_dr++;
+                    pack_buffer[pack_buffer_ind] = pack[i];
+                    pack_buffer_ind++;
                 }
             }
         } else {
@@ -119,18 +119,14 @@ void loop() {
         LoRa.beginPacket();
         LoRa.write(lastAckValue);
         LoRa.endPacket();
-    } else if (pack_buffer_st != pack_buffer_dr) {
+    } else if (pack_buffer_ind > 0) {
         ///nu am absolut nimic altceva de facut in afara de golirea bufferului serial.
 
-        ///opreste forul daca s-a ridicat justReceivedPack si trateaza pack_buffer ca un deque.
-        while (pack_buffer_st != pack_buffer_dr && !justReceivedPack) {
-            Serial.write(pack_buffer[pack_buffer_st]);
-            pack_buffer_st++;
+        ///TODO daca tot nu merge, opreste forul daca s-a ridicat justReceivedPack si trateaza pack_buffer ca un deque.
+        for (int i = 0; i < pack_buffer_ind; i++) {
+            Serial.write(pack_buffer[i]);
         }
 
-        if (pack_buffer_st == pack_buffer_dr) { ///daca am golit coada, resetez indicii la inceput.
-            pack_buffer_st = 0;
-            pack_buffer_dr = 0;
-        }
+        pack_buffer_ind = 0;
     }
 }
